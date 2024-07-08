@@ -103,18 +103,18 @@ def parse_reserve_factors(ws, load_cases):
     column = 2
     for i, load_case in enumerate(load_cases):
         row_loads = 32
-        for k, load in enumerate(load_case.Panels):
+        index = 0
+        for k, load in enumerate(load_case.PanelsLayers):
             if load.e_id == 1:
-                cellref = ws.cell(row=row_loads + k, column=column)
+                cellref = ws.cell(row=row_loads + index, column=column)
                 cellref.value = load.reserve_factor.RF_FF
-                cellref = ws.cell(row=row_loads + k, column=column + 1)
+                cellref = ws.cell(row=row_loads + index, column=column + 1)
                 cellref.value = load.reserve_factor.RF_IFF
-                cellref = ws.cell(row=row_loads + k, column=column + 2)
+                cellref = ws.cell(row=row_loads + index, column=column + 2)
                 cellref.value = load.mode
-                cellref = ws.cell(row=row_loads + k, column=column + 3)
+                cellref = ws.cell(row=row_loads + index, column=column + 3)
                 cellref.value = 0 # TODO: load.reserve_factor.RF_strength
-            else:
-                break
+                index += 1
         row_loads = 40
         for k, load in enumerate(load_case.Stringers):
             if load.e_id == 40:

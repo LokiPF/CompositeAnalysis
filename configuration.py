@@ -78,7 +78,7 @@ class Panel(Updatable):
     RF_panel_buckling: float = 0.0
 
 @dataclass
-class PanelLayers(NamedTuple):
+class PanelLayers(Updatable):
     e_id: int
     layer: int
     sig_xx: float

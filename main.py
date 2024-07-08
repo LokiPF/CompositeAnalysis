@@ -199,8 +199,8 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
         for panel in load_case.PanelsLayers:
             if panel.e_id == 1:
                 for angle in dim_ply.angles:
-                    RF_ff = calculate_RF_FF(panel.sigma_1, mat)
-                    f_iff, mode = puck_failure_criteria(panel.sigma_2, panel.tau, 0.25, mat)
+                    RF_ff = calculate_RF_FF(panel.sig_xx, mat)
+                    f_iff, mode = puck_failure_criteria(panel.sig_yy, panel.sig_xy, 0.25, mat)
                     RF_iff = 1 / f_iff
                     panel.reserve_factor = ReserveFactors(RF_ff, RF_iff, [])
                     panel.mode = mode
