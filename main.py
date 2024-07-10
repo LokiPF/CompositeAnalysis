@@ -2,7 +2,7 @@ import numpy as np
 
 from configuration import MaterialProperties, DimensionsPly, Stringer, Panel, ReserveFactors, DimensionsPanel, \
     DimensionsStringer, LoadCase, Configuration
-from excel_handler import read_excel_input, write_excel_template
+from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix
 from material_properties_handler import create_material_properties, create_dimensions_stringer, create_dimensions_panel, \
     create_configuration
 
@@ -71,7 +71,7 @@ def calculate_z_values(ply_thicknesses):
     z_values = [-total_thickness / 2]
     for thickness in ply_thicknesses:
         z_values.append(z_values[-1] + thickness)
-    return z_values
+    return np.round(z_values, 3)
 
 
 def transform_strains(theta, epsilon_x, epsilon_y, gamma_xy):
@@ -263,8 +263,8 @@ def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
     beta = sigma_y / sigma_x
 
     # Iterate over m and n ranges to find the minimum sigma_cr
-    for m in range(1,11):
-        for n in range(1,11):
+    for m in range(1, 11):
+        for n in range(1, 11):
             # Calculate the critical biaxial stress
             term1 = (np.pi ** 2) / (b ** 2 * t)
             term2 = 1 / ((m / alpha) ** 2 + beta * n ** 2)
@@ -317,7 +317,7 @@ def task_e(config: Configuration, load_cases: list[LoadCase], dim_stringers: Dim
     A2 = (dim_stringers.DIM2 - dim_stringers.DIM3) * dim_stringers.DIM4  # Area web
     volume_stringers = (A1 + A2) * dim_panels.b
     volume_panels = dim_panels.b * dim_panels.a * dim_panels.t
-    A, B, D = calc_ABD_matrix(mat, dim_ply)
+    A, B, D = calc_ABD_matrix(mat, dim_ply, True)
     # --- Calculating weighted stress average
     for load_case in load_cases:
         for i in range(4):
@@ -363,7 +363,8 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
     r_gyr = np.sqrt(I / A_tot)
     sigma_crippling = sigma_crip(config, dim_stringer)
     lamda = dim_panel.b / r_gyr
-    E = calc_E(D, dim_stringer, dim_panel, I_stringer_flange, I_stringer_web, I_panel, Az2_stringer_web, Az2_stringer_flange, Az2_panel)
+    E = calc_E(D, dim_stringer, dim_panel, I_stringer_flange, I_stringer_web, I_panel, Az2_stringer_web,
+               Az2_stringer_flange, Az2_panel)
     lamda_crit = calc_lamda_crit(E, sigma_crippling)
     sigma_cr = calc_sigma_cr(lamda, lamda_crit, E, sigma_crippling)
     return sigma_cr, sigma_crippling, E
@@ -396,7 +397,7 @@ def calc_sigma_cr(lamda, lamda_crit, E, sigma_crip):
     return (np.square(np.pi) * E) / np.square(lamda)
 
 
-def calc_ABD_matrix(mat: MaterialProperties, dim_ply: DimensionsPly):
+def calc_ABD_matrix(mat: MaterialProperties, dim_ply: DimensionsPly, write_excel_flag: bool = False):
     # --- Calculate A, B, D ---
     nu21 = mat.nu12 * mat.E2 / mat.E1
     Q_matrix = calculate_Q_matrix(mat, nu21)
@@ -405,6 +406,8 @@ def calc_ABD_matrix(mat: MaterialProperties, dim_ply: DimensionsPly):
     for k in range(len(dim_ply.angles)):
         Q_bars.append(calculate_Q_bar_matrix(Q_matrix, dim_ply.angles[k]))
     A, B, D = calculate_ABD_matrices(Q_bars, z_values)
+    if write_excel_flag:
+        parse_ADB_matrix(A, D, B)
     return A, B, D
 
 

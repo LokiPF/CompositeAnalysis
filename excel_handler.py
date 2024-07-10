@@ -76,7 +76,6 @@ def read_excel_input(file_path="./input"):
     return load_cases
 
 
-
 def fill_csv_with_commas(input_file):
     with open(input_file, 'r') as infile:
         reader = csv.reader(infile)
@@ -90,13 +89,28 @@ def fill_csv_with_commas(input_file):
         writer.writerows(rows)
 
 
-def write_excel_template(load_cases: [LoadCase], io: IO=IO()):
+def write_excel_template(load_cases: [LoadCase], io: IO = IO()):
     wb = openpyxl.load_workbook(io.output_file)
     ws = wb.get_sheet_by_name(io.sheet_name_output)
     parse_reserve_factors(ws, load_cases)
     parse_plane_analysis(ws, load_cases)
     parse_stringer_analysis(ws, load_cases)
     wb.save(io.output_file)
+
+
+def parse_ADB_matrix(A, B, D, io: IO = IO()):
+    wb = openpyxl.load_workbook(io.output_file)
+    ws = wb.get_sheet_by_name(io.sheet_name_output)
+    parse_matrix(A, ws, 17)
+    parse_matrix(B, ws, 21)
+    parse_matrix(D, ws, 25)
+    wb.save(io.output_file)
+
+
+def parse_matrix(mat, ws, start_row):
+    for i, row in enumerate(mat):
+        for j, element in enumerate(row):
+            ws.cell(row=i + start_row, column=j+1).value = element
 
 
 def parse_reserve_factors(ws, load_cases):
@@ -113,7 +127,7 @@ def parse_reserve_factors(ws, load_cases):
                 cellref = ws.cell(row=row_loads + index, column=column + 2)
                 cellref.value = load.mode
                 cellref = ws.cell(row=row_loads + index, column=column + 3)
-                cellref.value = 0 # TODO: load.reserve_factor.RF_strength
+                cellref.value = 0  # TODO: load.reserve_factor.RF_strength
                 index += 1
         row_loads = 40
         for k, load in enumerate(load_case.Stringers):
@@ -125,7 +139,7 @@ def parse_reserve_factors(ws, load_cases):
                 cellref = ws.cell(row=row_loads + k, column=column + 2)
                 cellref.value = load.mode
                 cellref = ws.cell(row=row_loads + k, column=column + 3)
-                cellref.value = 0 # TODO: load.reserve_factor.RF_strength
+                cellref.value = 0  # TODO: load.reserve_factor.RF_strength
             else:
                 break
         column += 6
