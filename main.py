@@ -285,6 +285,7 @@ def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
             sigma_x_cr_bi = term1 * term2 * (term3 + term4 + term5)
             if sigma_x_cr_bi < sigma_cr and sigma_x_cr_bi > 0:
                 sigma_cr = sigma_x_cr_bi
+                print(m, n)
 
     return sigma_cr
 
@@ -446,7 +447,7 @@ def task_d(load_cases: [LoadCase], dim_stringers: DimensionsStringer,
     A, B, D = calc_ABD_matrix(mat, dim_ply)
     for load_case in load_cases:
         for i in range(5):
-            panel = load_case.Panels[i * 6 + 3: i * 6 + 9]
+            panel = load_case.Panels[i * 6: i * 6 + 6]
             avg_sigma_panel = avg_panel(panel)
             A, B, D = calc_ABD_matrix_panel(mat, dim_panels, dim_ply)
             sigma_cr = biaxial_loading_stress(dim_panels.a, dim_panels.b, dim_panels.t, D, avg_sigma_panel[0],
