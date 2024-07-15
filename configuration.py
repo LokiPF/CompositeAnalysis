@@ -29,7 +29,7 @@ class DimensionsPanel(NamedTuple):
 
 
 class DimensionsPly(Updatable):
-    thickness: [float] = [1.104, 1.104, 1.104, 1.104, 1.104, 1.104, 1.104, 1.104]
+    thickness: [float] = [0.368, 0.368, 0.368, 0.368, 0.368, 0.368, 0.368, 0.368]
     angles: [float] = [45, -45, 0, 90, 90, 0, -45, 45]
 
 

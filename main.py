@@ -1,8 +1,10 @@
+from copy import deepcopy
+
 import numpy as np
 
 from configuration import MaterialProperties, DimensionsPly, Stringer, Panel, ReserveFactors, DimensionsPanel, \
     DimensionsStringer, LoadCase, Configuration
-from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix
+from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix, parse_stringer_strength
 from material_properties_handler import create_material_properties, create_dimensions_stringer, create_dimensions_panel, \
     create_configuration
 
@@ -63,7 +65,7 @@ def calculate_ABD_matrices(Q_bars, z_values):
         B += Q_bar * delta_z2 / 2
         D += Q_bar * delta_z3 / 3
 
-    return A, B, D
+    return deepcopy(np.round(A, 5)), deepcopy(np.round(B, 5)), (np.round(D, 5))
 
 
 def calculate_z_values(ply_thicknesses):
@@ -140,10 +142,10 @@ def puck_failure_criteria(sigma2, tau21, p, material_props):
         mode = "B"
     else:
         # Mode C
-        f_E_IFF = np.sqrt(
-            (tau21 / (2.0 * (1.0 + p) * R_parallel)) ** 2 +
-            (sigma2 / R_perp_neg) ** 2
-        ) * (R_perp_neg / -sigma2)
+        f_E_IFF = (
+                          (tau21 / (2.0 * (1.0 + p) * R_parallel)) ** 2 +
+                          (sigma2 / R_perp_neg) ** 2
+                  ) * (R_perp_neg / -sigma2)
         mode = "C"
 
     return float(f_E_IFF), mode
@@ -173,15 +175,30 @@ def calculate_RF_FF(sigma1, material_props):
 
 
 def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCase]):
+    column = 2
     for load_case in load_cases:
         nu21 = mat.nu12 * mat.E2 / mat.E1
         Q_matrix = calculate_Q_matrix(mat, nu21)
+        # --- Calculate reserve factors for Panel ---
+        print("Calculating reserve factors for Panel...", end='')
+        for panel in load_case.PanelsLayers:
+            if panel.e_id == 1:
+                RF_ff = calculate_RF_FF(1.5*panel.sig_xx, mat)
+                f_iff, mode = puck_failure_criteria(1.5*panel.sig_yy, 1.5*panel.sig_xy, 0.25, mat)
+                RF_iff = 1 / f_iff
+                RF_strength = RF_ff
+                if RF_iff < RF_strength:
+                    RF_strength = RF_iff
+                panel.reserve_factor = ReserveFactors(RF_ff, RF_iff, RF_strength)
+                panel.mode = mode
+                # TODO: add error message when certain constraints missed
         # --- Calculate reserve factors for stringers ---
         print("Calculating reserve factors for stringers...", end='')
         for stringer in load_case.Stringers:
             if stringer.e_id == 40:
+                stringer_list = []
                 for angle in dim_ply.angles:
-                    epsilon_12 = transform_strains(angle, stringer.strain, 0, 0)
+                    epsilon_12 = transform_strains(angle, 1.5*stringer.strain, 0, 0)
                     sigma_12 = calculate_stresses(Q_matrix, epsilon_12)
                     RF_ff = calculate_RF_FF(sigma_12[0], mat)
                     f_iff, mode = puck_failure_criteria(sigma_12[1], sigma_12[2], 0.25, mat)
@@ -190,22 +207,15 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
                         RF_iff = 0
                     else:
                         RF_iff = 1 / f_iff
-                    stringer.reserve_factor = ReserveFactors(RF_ff, RF_iff, 0)
+                    RF_strength = RF_ff
+                    if RF_iff < RF_strength:
+                        RF_strength = RF_iff
+                    stringer.reserve_factor = ReserveFactors(RF_ff, RF_iff, RF_strength)
                     stringer.mode = mode
-                    # TODO: add strengths
-                    # TODO: add error message when certain constraints missed
-        # --- Calculate reserve factors for Panel ---
-        print("Calculating reserve factors for Panel...", end='')
-        for panel in load_case.PanelsLayers:
-            if panel.e_id == 1:
-                for angle in dim_ply.angles:
-                    RF_ff = calculate_RF_FF(panel.sig_xx, mat)
-                    f_iff, mode = puck_failure_criteria(panel.sig_yy, panel.sig_xy, 0.25, mat)
-                    RF_iff = 1 / f_iff
-                    panel.reserve_factor = ReserveFactors(RF_ff, RF_iff, [])
-                    panel.mode = mode
-                    # TODO: add strengths
-                    # TODO: add error message when certain constraints missed
+                    stringer_list.append(deepcopy(stringer))
+                parse_stringer_strength(stringer_list, column)
+                column += 6
+                # TODO: add error message when certain constraints missed
 
 
 def rotate_stress_90(sigma_x, sigma_y, tau_xy):
@@ -273,7 +283,7 @@ def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
             term5 = D22 * n ** 4
 
             sigma_x_cr_bi = term1 * term2 * (term3 + term4 + term5)
-            if sigma_x_cr_bi < sigma_cr:
+            if sigma_x_cr_bi < sigma_cr and sigma_x_cr_bi > 0:
                 sigma_cr = sigma_x_cr_bi
 
     return sigma_cr
@@ -289,8 +299,9 @@ def stiffness_ratio(D):
     return delta
 
 
-def shear_loading_stress(a, b, t, D):
+def shear_loading_stress(dim_ply, dim_pan, mat, a, b, t, D):
     # Extract stiffness coefficients from the D matrix
+    A, B, D = calc_ABD_matrix_panel(mat, dim_pan, dim_ply)
     D11, D12, D22, D66 = D[0, 0], D[0, 1], D[1, 1], D[1, 0]
 
     # Calculate delta
@@ -407,8 +418,22 @@ def calc_ABD_matrix(mat: MaterialProperties, dim_ply: DimensionsPly, write_excel
         Q_bars.append(calculate_Q_bar_matrix(Q_matrix, dim_ply.angles[k]))
     A, B, D = calculate_ABD_matrices(Q_bars, z_values)
     if write_excel_flag:
-        parse_ADB_matrix(A, D, B)
+        parse_ADB_matrix(A, B, D)
     return A, B, D
+
+
+def calc_ABD_matrix_panel(mat: MaterialProperties, dim_panel: DimensionsPanel, dim_ply: DimensionsPly, write_excel_flag: bool = False):
+    # --- Calculate A, B, D ---
+    nu21 = mat.nu12 * mat.E2 / mat.E1
+    Q_matrix = calculate_Q_matrix(mat, nu21)
+    z_values = calculate_z_values([dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8])
+    Q_bars = []
+    for k in range(len(dim_ply.angles)):
+        Q_bars.append(calculate_Q_bar_matrix(Q_matrix, dim_ply.angles[k]))
+    A, B, D = calculate_ABD_matrices(Q_bars, z_values)
+    if write_excel_flag:
+        parse_ADB_matrix(A, B, D)
+    return 0.9*A, 0.9*B, 0.9*D
 
 
 def task_d(load_cases: [LoadCase], dim_stringers: DimensionsStringer,
@@ -423,11 +448,12 @@ def task_d(load_cases: [LoadCase], dim_stringers: DimensionsStringer,
         for i in range(5):
             panel = load_case.Panels[i * 6 + 3: i * 6 + 9]
             avg_sigma_panel = avg_panel(panel)
+            A, B, D = calc_ABD_matrix_panel(mat, dim_panels, dim_ply)
             sigma_cr = biaxial_loading_stress(dim_panels.a, dim_panels.b, dim_panels.t, D, avg_sigma_panel[0],
                                               avg_sigma_panel[1])
             RF_biax = (sigma_cr * 0.9) / (avg_sigma_panel[0] * 1.5)
-            tau_cr = shear_loading_stress(dim_panels.a, dim_panels.b, dim_panels.t, D)
-            RF_shear = (tau_cr * 0.9) / (avg_sigma_panel[1] * 1.5)
+            tau_cr = shear_loading_stress(dim_ply, dim_panels,mat, dim_panels.a, dim_panels.b, dim_panels.t, D)
+            RF_shear = (tau_cr * 0.9) / (avg_sigma_panel[2] * 1.5)
             RF_combined = np.abs(1 / (1 / RF_biax + np.square(1 / RF_shear)))
             load_case.Panels[i].RF_panel_buckling = RF_combined
             load_case.Panels[i].sig_xx_avg = avg_sigma_panel[0]

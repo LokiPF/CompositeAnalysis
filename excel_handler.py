@@ -110,7 +110,7 @@ def parse_ADB_matrix(A, B, D, io: IO = IO()):
 def parse_matrix(mat, ws, start_row):
     for i, row in enumerate(mat):
         for j, element in enumerate(row):
-            ws.cell(row=i + start_row, column=j+1).value = element
+            ws.cell(row=i + start_row, column=j + 1).value = element
 
 
 def parse_reserve_factors(ws, load_cases):
@@ -127,7 +127,7 @@ def parse_reserve_factors(ws, load_cases):
                 cellref = ws.cell(row=row_loads + index, column=column + 2)
                 cellref.value = load.mode
                 cellref = ws.cell(row=row_loads + index, column=column + 3)
-                cellref.value = 0  # TODO: load.reserve_factor.RF_strength
+                cellref.value = load.reserve_factor.RF_strength
                 index += 1
         row_loads = 40
         for k, load in enumerate(load_case.Stringers):
@@ -139,10 +139,27 @@ def parse_reserve_factors(ws, load_cases):
                 cellref = ws.cell(row=row_loads + k, column=column + 2)
                 cellref.value = load.mode
                 cellref = ws.cell(row=row_loads + k, column=column + 3)
-                cellref.value = 0  # TODO: load.reserve_factor.RF_strength
+                cellref.value = load.reserve_factor.RF_strength
             else:
                 break
         column += 6
+
+
+def parse_stringer_strength(stringers: [Stringer], column):
+    io = IO()
+    wb = openpyxl.load_workbook(io.output_file)
+    ws = wb.get_sheet_by_name(io.sheet_name_output)
+    row_loads = 40
+    for k, load in enumerate(stringers):
+        cellref = ws.cell(row=row_loads + k, column=column)
+        cellref.value = load.reserve_factor.RF_FF
+        cellref = ws.cell(row=row_loads + k, column=column + 1)
+        cellref.value = load.reserve_factor.RF_IFF
+        cellref = ws.cell(row=row_loads + k, column=column + 2)
+        cellref.value = load.mode
+        cellref = ws.cell(row=row_loads + k, column=column + 3)
+        cellref.value = load.reserve_factor.RF_strength
+    wb.save(io.output_file)
 
 
 def parse_plane_analysis(ws, load_cases):

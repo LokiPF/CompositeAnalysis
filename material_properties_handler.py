@@ -30,8 +30,10 @@ def create_material_properties():
 def create_dimensions_stringer():
     return DimensionsStringer(70, 42.944, 2.944, 2.944)
 
+
 def create_dimensions_panel():
-    return DimensionsPanel(600, 400, 8*1.104)
+    return DimensionsPanel(600, 400, 8 * 1.104)
+
 
 def create_configuration():
     return Configuration()
