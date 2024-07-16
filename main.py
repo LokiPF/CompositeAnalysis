@@ -183,8 +183,8 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
         print("Calculating reserve factors for Panel...", end='')
         for panel in load_case.PanelsLayers:
             if panel.e_id == 1:
-                RF_ff = calculate_RF_FF(1.5*panel.sig_xx, mat)
-                f_iff, mode = puck_failure_criteria(1.5*panel.sig_yy, 1.5*panel.sig_xy, 0.25, mat)
+                RF_ff = calculate_RF_FF(1.5 * panel.sig_xx, mat)
+                f_iff, mode = puck_failure_criteria(1.5 * panel.sig_yy, 1.5 * panel.sig_xy, 0.25, mat)
                 RF_iff = 1 / f_iff
                 RF_strength = RF_ff
                 if RF_iff < RF_strength:
@@ -198,7 +198,7 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
             if stringer.e_id == 40:
                 stringer_list = []
                 for angle in dim_ply.angles:
-                    epsilon_12 = transform_strains(angle, 1.5*stringer.strain, 0, 0)
+                    epsilon_12 = transform_strains(angle, 1.5 * stringer.strain, 0, 0)
                     sigma_12 = calculate_stresses(Q_matrix, epsilon_12)
                     RF_ff = calculate_RF_FF(sigma_12[0], mat)
                     f_iff, mode = puck_failure_criteria(sigma_12[1], sigma_12[2], 0.25, mat)
@@ -262,7 +262,7 @@ def avg_stringer(stringer: list[Stringer]):
 
 def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
     # Extract stiffness coefficients from the D matrix
-    D11, D12, D22, D66 = D[0, 0], D[0, 1], D[1, 1], D[1, 0]
+    D11, D12, D22, D66 = D[0, 0], D[0, 1], D[1, 1], D[2, 2]
 
     # Initialize the minimum sigma_cr with a large number
     sigma_cr = np.inf
@@ -303,7 +303,7 @@ def stiffness_ratio(D):
 def shear_loading_stress(dim_ply, dim_pan, mat, a, b, t, D):
     # Extract stiffness coefficients from the D matrix
     A, B, D = calc_ABD_matrix_panel(mat, dim_pan, dim_ply)
-    D11, D12, D22, D66 = D[0, 0], D[0, 1], D[1, 1], D[1, 0]
+    D11, D12, D22, D66 = D[0, 0], D[0, 1], D[1, 1], D[2, 2]
 
     # Calculate delta
     delta = stiffness_ratio(D)
@@ -327,9 +327,10 @@ def task_e(config: Configuration, load_cases: list[LoadCase], dim_stringers: Dim
     # --- Calculating the volumes ---
     A1 = dim_stringers.DIM1 * dim_stringers.DIM3  # Area flange
     A2 = (dim_stringers.DIM2 - dim_stringers.DIM3) * dim_stringers.DIM4  # Area web
-    volume_stringers = (A1 + A2) * dim_panels.b
+    volume_stringers = (A1 + A2) * dim_panels.a
     volume_panels = dim_panels.b * dim_panels.a * dim_panels.t
     A, B, D = calc_ABD_matrix(mat, dim_ply, True)
+    skin_A, skin_B, skin_D = calc_ABD_matrix_panel(mat, dim_panels, dim_ply)
     # --- Calculating weighted stress average
     for load_case in load_cases:
         for i in range(4):
@@ -338,8 +339,8 @@ def task_e(config: Configuration, load_cases: list[LoadCase], dim_stringers: Dim
             avg_stringer_xx = avg_stringer(stringer) * volume_stringers
             avg_sigma_panel = avg_panel(panel)[0] * volume_panels
             sigma_combined = (avg_sigma_panel + avg_stringer_xx) / (volume_panels + volume_stringers)
-            sigma_cr, sigma_crippling, E = euler_johnson(config, dim_panels, dim_stringers, D)
-            RF = (sigma_cr * 0.9) / (sigma_combined * 1.5)
+            sigma_cr, sigma_crippling, E = euler_johnson(config, dim_panels, dim_stringers, skin_A, skin_D, A, D)
+            RF = np.abs((sigma_cr * 0.9) / (sigma_combined * 1.5))
             load_case.Stringers[i].RF_combined_buckling = RF
             load_case.Stringers[i].sig_combined = sigma_combined
             load_case.Stringers[i].sig_crip = sigma_crippling
@@ -347,53 +348,76 @@ def task_e(config: Configuration, load_cases: list[LoadCase], dim_stringers: Dim
 
 def sigma_crip(config: Configuration, dim: DimensionsStringer):
     """One Edge Free"""
-    sigma_crip_flange = config.sigma_ul * 1.63 / (np.power((dim.DIM1 * 0.5 / dim.DIM3), 0.717))
+    # sigma_crip_flange = config.sigma_ul * 1.63 / (np.power((dim.DIM1 * 0.5 / dim.DIM3), 0.717))
     sigma_crip_web = config.sigma_ul * 1.63 / (np.power(((dim.DIM2 - dim.DIM3) / dim.DIM4), 0.717))
-    sigma_crip_tot = (sigma_crip_flange * dim.DIM1 * dim.DIM3 + sigma_crip_web * (dim.DIM2 - dim.DIM3) * dim.DIM4) / (
-            dim.DIM1 * dim.DIM3 + (dim.DIM2 - dim.DIM3) * dim.DIM4)
-    return float(sigma_crip_tot)
+    # sigma_crip_tot = (sigma_crip_flange * dim.DIM1 * dim.DIM3 + sigma_crip_web * (dim.DIM2 - dim.DIM3) * dim.DIM4) / (
+    #        dim.DIM1 * dim.DIM3 + (dim.DIM2 - dim.DIM3) * dim.DIM4)
+    return float(sigma_crip_web)
 
 
-def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringer: DimensionsStringer, D):
-    A_skin = dim_panel.t * dim_panel.a
+def E_hom_avg_x(t, A, free_lateral_deformation: bool) -> float:
+    if free_lateral_deformation:
+        # noinspection PyTypeChecker
+        return 1 / np.linalg.inv(A)[0, 0] / t
+    else:
+        # noinspection PyTypeChecker
+        return (A[0, 0]) / t
+
+
+def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringer: DimensionsStringer, A_panel, D_panel,
+                  A_stringer, D_stringer):
+    A_skin = dim_panel.t * dim_panel.b
     A_stringer_flange = dim_stringer.DIM1 * dim_stringer.DIM3
     A_stringer_web = (dim_stringer.DIM2 - dim_stringer.DIM3) * dim_stringer.DIM4
     A_tot = A_skin + A_stringer_flange + A_stringer_web
-    z_bar_numerator = -dim_panel.t / 2 * A_skin + dim_stringer.DIM3 / 2 * A_stringer_flange + (
-            dim_stringer.DIM3 + (dim_stringer.DIM2 - dim_stringer.DIM3) / 2) * A_stringer_web
-    z_bar = z_bar_numerator / A_tot
+    z_bar_denom = A_skin * E_hom_avg_x(dim_panel.t, A_panel/0.9, False) + A_stringer_web * E_hom_avg_x(
+        dim_stringer.DIM3, A_stringer, True) + A_stringer_flange * E_hom_avg_x(
+        dim_stringer.DIM3, A_stringer, False)
+    z_bar_numerator = -dim_panel.t / 2 * A_skin * E_hom_avg_x(dim_panel.t, A_panel/0.9, False) + dim_stringer.DIM3 / 2 * A_stringer_flange * E_hom_avg_x(
+        dim_stringer.DIM3, A_stringer, False) + (
+                              dim_stringer.DIM3 + (
+                                  dim_stringer.DIM2 - dim_stringer.DIM3) / 2) * A_stringer_web * E_hom_avg_x(
+        dim_stringer.DIM3, A_stringer, True)
+    z_bar = z_bar_numerator / z_bar_denom
     Az2_stringer_web = A_stringer_web * np.square(
         dim_stringer.DIM3 + (dim_stringer.DIM2 - dim_stringer.DIM3) / 2 - z_bar)
     Az2_stringer_flange = A_stringer_flange * np.square(
-        dim_stringer.DIM1 / 2 - z_bar)
+        dim_stringer.DIM3 / 2 - z_bar)
     Az2_panel = A_skin * np.square(-dim_panel.t / 2 - z_bar)
-    I_panel = np.power(dim_panel.t, 3) * dim_panel.a / 12 + Az2_panel
+    I_panel = np.power(dim_panel.t, 3) * dim_panel.b / 12 + Az2_panel
     I_stringer_flange = np.power(dim_stringer.DIM3, 3) * dim_stringer.DIM1 / 12 + Az2_stringer_flange
     I_stringer_web = np.power(dim_stringer.DIM2 - dim_stringer.DIM3,
                               3) * dim_stringer.DIM4 / 12 + Az2_stringer_web
     I = I_panel + I_stringer_flange + I_stringer_web
     r_gyr = np.sqrt(I / A_tot)
     sigma_crippling = sigma_crip(config, dim_stringer)
-    lamda = dim_panel.b / r_gyr
-    E = calc_E(D, dim_stringer, dim_panel, I_stringer_flange, I_stringer_web, I_panel, Az2_stringer_web,
+    lamda = dim_panel.a / r_gyr
+    E = calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringer, dim_panel,
+               I_stringer_flange - Az2_stringer_flange, I_stringer_web - Az2_stringer_web,
+               I_panel - Az2_panel, Az2_stringer_web,
                Az2_stringer_flange, Az2_panel)
     lamda_crit = calc_lamda_crit(E, sigma_crippling)
     sigma_cr = calc_sigma_cr(lamda, lamda_crit, E, sigma_crippling)
     return sigma_cr, sigma_crippling, E
 
 
-def calc_E(D, dim_stringers: DimensionsStringer, dim_panels: DimensionsPanel, I_stringer_flange, I_stringer_web,
+def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsStringer, dim_panels: DimensionsPanel,
+           I_stringer_flange, I_stringer_web,
            I_panel, Az2_stringer_web, Az2_stringer_flange, Az2_panel):
-    D_inv = np.linalg.inv(D)
-    E_x_b_flange = 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
-    E_x_b_panel = 12 / (dim_panels.t ** 3) * D[0, 0]
-    E_x_b_web = 12 / (D_inv[0, 0] * (dim_stringers.DIM4 ** 3))
-    E_y_b_flange = 12 / (dim_stringers.DIM3 ** 3) * D[1, 1]
-    E_y_b_panel = 12 / (dim_panels.t ** 3) * D[1, 1]
-    E_y_b_web = 12 / (D_inv[1, 1] * (dim_stringers.DIM4 ** 3))
-    numerator = (E_y_b_web * I_stringer_web + Az2_stringer_web * E_x_b_web + E_y_b_flange * I_stringer_flange +
-                 Az2_stringer_flange * E_x_b_flange + E_y_b_panel * I_panel + Az2_panel * E_x_b_panel)
+    A_inv = np.linalg.inv(A_stringer)
+    D_inv = np.linalg.inv(D_stringer)
+    E_x_b_flange = A_stringer[0, 0] / dim_stringers.DIM3  # 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
+    E_x_b_panel = A_panel[0, 0] / dim_panels.t  # 12 / (dim_panels.t ** 3) * A[0, 0]
+    E_x_b_web = 1 / (A_inv[0, 0] *
+                     dim_stringers.DIM3)  # 12 / (D_inv[0, 0] * (dim_stringers.DIM4 ** 3))
+    E_y_b_flange = D_stringer[0, 0] * 12 / (
+            dim_stringers.DIM3 ** 3)  # 12 / (dim_stringers.DIM3 ** 3) * A_stringer[1, 1]
+    E_y_b_panel = D_panel[0, 0] * 12 / (dim_panels.t ** 3)  # 12 / (dim_panels.t ** 3) * A_stringer[1, 1]
+    E_y_b_web = E_x_b_web  # 12 / (D_inv[1, 1] * (dim_stringers.DIM4 ** 3))
+    # numerator = (I_stringer_web + Az2_stringer_web * E_x_b_web + E_y_b_flange * I_stringer_flange +
+    #             Az2_stringer_flange * E_x_b_flange + E_y_b_panel * I_panel + Az2_panel * E_x_b_panel)
     denominator = I_stringer_web + Az2_stringer_web + I_stringer_flange + Az2_stringer_flange + I_panel + Az2_panel
+    numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
     E_y_b = numerator / denominator
     return E_y_b
 
@@ -423,18 +447,21 @@ def calc_ABD_matrix(mat: MaterialProperties, dim_ply: DimensionsPly, write_excel
     return A, B, D
 
 
-def calc_ABD_matrix_panel(mat: MaterialProperties, dim_panel: DimensionsPanel, dim_ply: DimensionsPly, write_excel_flag: bool = False):
+def calc_ABD_matrix_panel(mat: MaterialProperties, dim_panel: DimensionsPanel, dim_ply: DimensionsPly,
+                          write_excel_flag: bool = False):
     # --- Calculate A, B, D ---
     nu21 = mat.nu12 * mat.E2 / mat.E1
     Q_matrix = calculate_Q_matrix(mat, nu21)
-    z_values = calculate_z_values([dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8, dim_panel.t/8])
+    z_values = calculate_z_values(
+        [dim_panel.t / 8, dim_panel.t / 8, dim_panel.t / 8, dim_panel.t / 8, dim_panel.t / 8, dim_panel.t / 8,
+         dim_panel.t / 8, dim_panel.t / 8])
     Q_bars = []
     for k in range(len(dim_ply.angles)):
         Q_bars.append(calculate_Q_bar_matrix(Q_matrix, dim_ply.angles[k]))
     A, B, D = calculate_ABD_matrices(Q_bars, z_values)
     if write_excel_flag:
         parse_ADB_matrix(A, B, D)
-    return 0.9*A, 0.9*B, 0.9*D
+    return 0.9 * A, 0.9 * B, 0.9 * D
 
 
 def task_d(load_cases: [LoadCase], dim_stringers: DimensionsStringer,
@@ -452,9 +479,9 @@ def task_d(load_cases: [LoadCase], dim_stringers: DimensionsStringer,
             A, B, D = calc_ABD_matrix_panel(mat, dim_panels, dim_ply)
             sigma_cr = biaxial_loading_stress(dim_panels.a, dim_panels.b, dim_panels.t, D, avg_sigma_panel[0],
                                               avg_sigma_panel[1])
-            RF_biax = (sigma_cr * 0.9) / (avg_sigma_panel[0] * 1.5)
-            tau_cr = shear_loading_stress(dim_ply, dim_panels,mat, dim_panels.a, dim_panels.b, dim_panels.t, D)
-            RF_shear = (tau_cr * 0.9) / (avg_sigma_panel[2] * 1.5)
+            RF_biax = np.abs((sigma_cr) / (avg_sigma_panel[0] * 1.5))
+            tau_cr = shear_loading_stress(dim_ply, dim_panels, mat, dim_panels.a, dim_panels.b, dim_panels.t, D)
+            RF_shear = np.abs((tau_cr) / (avg_sigma_panel[2] * 1.5))
             RF_combined = np.abs(1 / (1 / RF_biax + np.square(1 / RF_shear)))
             load_case.Panels[i].RF_panel_buckling = RF_combined
             load_case.Panels[i].sig_xx_avg = avg_sigma_panel[0]

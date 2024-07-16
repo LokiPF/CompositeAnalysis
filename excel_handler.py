@@ -59,8 +59,8 @@ def read_excel_input(file_path="./input"):
             panel = Panel(
                 e_id=int(df_stress.loc[index_second, 0]),
                 sigma_1=float(df_stress.loc[index_second, 5]),
-                sigma_2=float(df_stress.loc[index_second, 6]),
-                tau=float(df_stress.loc[index_second, 7])
+                sigma_2=float(df_stress.loc[index_second, 7]),
+                tau=float(df_stress.loc[index_second, 6])
             )
             panels.append(panel)
             index_second += 1
