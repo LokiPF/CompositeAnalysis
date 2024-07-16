@@ -133,7 +133,7 @@ def puck_failure_criteria(sigma2, tau21, p, material_props):
             p * (sigma2 / R_parallel)
         )
         mode = "A"
-    elif sigma2 < 0 and abs(sigma2 / tau21) <= abs(R_perp_A / tau21C):
+    elif sigma2 < 0 and abs(tau21 / sigma2) >= abs(tau21C / R_perp_A):
         # Mode B
         f_E_IFF = (1.0 / R_parallel) * (
                 np.sqrt(tau21 ** 2 + (p * sigma2) ** 2) +
@@ -167,7 +167,6 @@ def calculate_RF_FF(sigma1, material_props):
     else:
         R_parallel = -material_props.R1c
     if sigma1 == 0:
-        print("Warning: Encountered 0 value in denominator.")
         RF_FF = 0
     else:
         RF_FF = R_parallel / sigma1
@@ -180,7 +179,6 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
         nu21 = mat.nu12 * mat.E2 / mat.E1
         Q_matrix = calculate_Q_matrix(mat, nu21)
         # --- Calculate reserve factors for Panel ---
-        print("Calculating reserve factors for Panel...", end='')
         for panel in load_case.PanelsLayers:
             if panel.e_id == 1:
                 RF_ff = calculate_RF_FF(1.5 * panel.sig_xx, mat)
@@ -193,7 +191,6 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
                 panel.mode = mode
                 # TODO: add error message when certain constraints missed
         # --- Calculate reserve factors for stringers ---
-        print("Calculating reserve factors for stringers...", end='')
         for stringer in load_case.Stringers:
             if stringer.e_id == 40:
                 stringer_list = []
@@ -203,7 +200,6 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
                     RF_ff = calculate_RF_FF(sigma_12[0], mat)
                     f_iff, mode = puck_failure_criteria(sigma_12[1], sigma_12[2], 0.25, mat)
                     if f_iff == 0:
-                        print("Warning: Encountered 0 value in denominator.")
                         RF_iff = 0
                     else:
                         RF_iff = 1 / f_iff
@@ -285,8 +281,6 @@ def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
             sigma_x_cr_bi = term1 * term2 * (term3 + term4 + term5)
             if sigma_x_cr_bi < sigma_cr and sigma_x_cr_bi > 0:
                 sigma_cr = sigma_x_cr_bi
-                print(m, n)
-
     return sigma_cr
 
 
@@ -370,13 +364,14 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
     A_stringer_flange = dim_stringer.DIM1 * dim_stringer.DIM3
     A_stringer_web = (dim_stringer.DIM2 - dim_stringer.DIM3) * dim_stringer.DIM4
     A_tot = A_skin + A_stringer_flange + A_stringer_web
-    z_bar_denom = A_skin * E_hom_avg_x(dim_panel.t, A_panel/0.9, False) + A_stringer_web * E_hom_avg_x(
+    z_bar_denom = A_skin * E_hom_avg_x(dim_panel.t, A_panel / 0.9, False) + A_stringer_web * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, True) + A_stringer_flange * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, False)
-    z_bar_numerator = -dim_panel.t / 2 * A_skin * E_hom_avg_x(dim_panel.t, A_panel/0.9, False) + dim_stringer.DIM3 / 2 * A_stringer_flange * E_hom_avg_x(
+    z_bar_numerator = -dim_panel.t / 2 * A_skin * E_hom_avg_x(dim_panel.t, A_panel / 0.9,
+                                                              False) + dim_stringer.DIM3 / 2 * A_stringer_flange * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, False) + (
                               dim_stringer.DIM3 + (
-                                  dim_stringer.DIM2 - dim_stringer.DIM3) / 2) * A_stringer_web * E_hom_avg_x(
+                              dim_stringer.DIM2 - dim_stringer.DIM3) / 2) * A_stringer_web * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, True)
     z_bar = z_bar_numerator / z_bar_denom
     Az2_stringer_web = A_stringer_web * np.square(
