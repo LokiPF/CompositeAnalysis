@@ -31,6 +31,33 @@ def read_excel_template(file_path, material_properties: MaterialProperties, star
     material_properties.R21 = 100
 
 
+def parse_constants(E_hom_flange, E_hom_web, E_hom_skin, EI, z_EC_comb, r_gyr, lamda, lamda_crit):
+    io = IO()
+    wb = openpyxl.load_workbook(io.output_file)
+    ws = wb.get_sheet_by_name(io.sheet_name_output)
+    column = 2
+    for row in range(69, 73):
+        cellref = ws.cell(row=row, column=column)
+        cellref.value = E_hom_flange
+        cellref = ws.cell(row=row, column=column + 1)
+        cellref.value = E_hom_web
+        cellref = ws.cell(row=row, column=column + 2)
+        cellref.value = E_hom_skin
+        cellref = ws.cell(row=row, column=column + 3)
+        cellref.value = E_hom_skin
+        cellref = ws.cell(row=row, column=column + 4)
+        cellref.value = z_EC_comb
+        cellref = ws.cell(row=row, column=column + 5)
+        cellref.value = EI
+        cellref = ws.cell(row=row, column=column + 6)
+        cellref.value = r_gyr
+        cellref = ws.cell(row=row, column=column + 7)
+        cellref.value = lamda
+        cellref = ws.cell(row=row, column=column + 8)
+        cellref.value = lamda_crit
+    wb.save(io.output_file)
+
+
 def read_excel_input(file_path="./input"):
     df_xx = pd.read_csv(file_path + "/panel_xx.csv", header=None, delimiter=',', skiprows=11)
     df_yy = pd.read_csv(file_path + "/panel_yy.csv", header=None, delimiter=',', skiprows=11)

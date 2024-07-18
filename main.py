@@ -168,7 +168,6 @@ def calculate_RF_FF(sigma1, material_props):
     else:
         R_parallel = -material_props.R1c
     if sigma1 == 0:
-        print("Warning: Encountered 0 value in denominator.")
         RF_FF = 0
     else:
         RF_FF = R_parallel / sigma1
@@ -181,7 +180,6 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
         nu21 = mat.nu12 * mat.E2 / mat.E1
         Q_matrix = calculate_Q_matrix(mat, nu21)
         # --- Calculate reserve factors for Panel ---
-        print("Calculating reserve factors for Panel...", end='')
         for panel in load_case.PanelsLayers:
             if panel.e_id == 1:
                 RF_ff = calculate_RF_FF(1.5 * panel.sig_xx, mat)
@@ -194,7 +192,6 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
                 panel.mode = mode
                 # TODO: add error message when certain constraints missed
         # --- Calculate reserve factors for stringers ---
-        print("Calculating reserve factors for stringers...", end='')
         for stringer in load_case.Stringers:
             if stringer.e_id == 40:
                 stringer_list = []
@@ -204,7 +201,6 @@ def task_c(mat: MaterialProperties, dim_ply: DimensionsPly, load_cases: [LoadCas
                     RF_ff = calculate_RF_FF(sigma_12[0], mat)
                     f_iff, mode = puck_failure_criteria(sigma_12[1], sigma_12[2], 0.25, mat)
                     if f_iff == 0:
-                        print("Warning: Encountered 0 value in denominator.")
                         RF_iff = 0
                     else:
                         RF_iff = 1 / f_iff
@@ -286,7 +282,6 @@ def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
             sigma_x_cr_bi = term1 * term2 * (term3 + term4 + term5)
             if sigma_x_cr_bi < sigma_cr and sigma_x_cr_bi > 0:
                 sigma_cr = sigma_x_cr_bi
-
     return sigma_cr
 
 
@@ -406,6 +401,8 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
 def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsStringer, dim_panels: DimensionsPanel,
            I_stringer_flange, I_stringer_web,
            I_panel, Az2_stringer_web, Az2_stringer_flange, Az2_panel):
+    #A_stringer = np.divide(A_stringer, 0.9)
+    #D_panel = np.divide(D_stringer, 0.9)
     A_inv = np.linalg.inv(A_stringer)
     D_inv = np.linalg.inv(D_stringer)
     E_x_b_flange = 0.9 * A_stringer[0, 0] / dim_stringers.DIM3  # 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
@@ -414,12 +411,12 @@ def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsSt
                            dim_stringers.DIM3)  # 12 / (D_inv[0, 0] * (dim_stringers.DIM4 ** 3))
     E_y_b_flange = 0.9 * D_stringer[0, 0] * 12 / (
             dim_stringers.DIM3 ** 3)  # 12 / (dim_stringers.DIM3 ** 3) * A_stringer[1, 1]
-    E_y_b_panel = D_panel[0, 0] * 12 / (dim_panels.t ** 3)  # 12 / (dim_panels.t ** 3) * A_stringer[1, 1]
+    E_y_b_panel = (D_panel[0, 0]) * 12 / (dim_panels.t ** 3)  # 12 / (dim_panels.t ** 3) * A_stringer[1, 1]
     E_y_b_web = E_x_b_web  # 12 / (D_inv[1, 1] * (dim_stringers.DIM4 ** 3))
     # numerator = (I_stringer_web + Az2_stringer_web * E_x_b_web + E_y_b_flange * I_stringer_flange +
     #             Az2_stringer_flange * E_x_b_flange + E_y_b_panel * I_panel + Az2_panel * E_x_b_panel)
     denominator = I_stringer_web + Az2_stringer_web + I_stringer_flange + Az2_stringer_flange + I_panel + Az2_panel
-    numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
+    numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel  * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
     E_y_b = numerator / denominator
     return E_y_b, E_x_b_flange, E_x_b_web, 12 / (dim_panels.t ** 3) * (D_panel[0, 0]), numerator
 
