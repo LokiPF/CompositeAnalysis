@@ -4,7 +4,8 @@ import numpy as np
 
 from configuration import MaterialProperties, DimensionsPly, Stringer, Panel, ReserveFactors, DimensionsPanel, \
     DimensionsStringer, LoadCase, Configuration
-from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix, parse_stringer_strength
+from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix, parse_stringer_strength, \
+    parse_constants
 from material_properties_handler import create_material_properties, create_dimensions_stringer, create_dimensions_panel, \
     create_configuration
 
@@ -133,7 +134,7 @@ def puck_failure_criteria(sigma2, tau21, p, material_props):
             p * (sigma2 / R_parallel)
         )
         mode = "A"
-    elif sigma2 < 0 and abs(sigma2 / tau21) <= abs(R_perp_A / tau21C):
+    elif sigma2 < 0 and abs(tau21 / sigma2) >= abs(tau21C / R_perp_A):
         # Mode B
         f_E_IFF = (1.0 / R_parallel) * (
                 np.sqrt(tau21 ** 2 + (p * sigma2) ** 2) +
@@ -285,7 +286,6 @@ def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
             sigma_x_cr_bi = term1 * term2 * (term3 + term4 + term5)
             if sigma_x_cr_bi < sigma_cr and sigma_x_cr_bi > 0:
                 sigma_cr = sigma_x_cr_bi
-                print(m, n)
 
     return sigma_cr
 
@@ -340,7 +340,7 @@ def task_e(config: Configuration, load_cases: list[LoadCase], dim_stringers: Dim
             avg_sigma_panel = avg_panel(panel)[0] * volume_panels
             sigma_combined = (avg_sigma_panel + avg_stringer_xx) / (volume_panels + volume_stringers)
             sigma_cr, sigma_crippling, E = euler_johnson(config, dim_panels, dim_stringers, skin_A, skin_D, A, D)
-            RF = np.abs((sigma_cr * 0.9) / (sigma_combined * 1.5))
+            RF = np.abs(sigma_cr / (sigma_combined * 1.5))
             load_case.Stringers[i].RF_combined_buckling = RF
             load_case.Stringers[i].sig_combined = sigma_combined
             load_case.Stringers[i].sig_crip = sigma_crippling
@@ -370,13 +370,14 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
     A_stringer_flange = dim_stringer.DIM1 * dim_stringer.DIM3
     A_stringer_web = (dim_stringer.DIM2 - dim_stringer.DIM3) * dim_stringer.DIM4
     A_tot = A_skin + A_stringer_flange + A_stringer_web
-    z_bar_denom = A_skin * E_hom_avg_x(dim_panel.t, A_panel/0.9, False) + A_stringer_web * E_hom_avg_x(
+    z_bar_denom = A_skin * E_hom_avg_x(dim_panel.t, A_panel / 0.9, False) + A_stringer_web * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, True) + A_stringer_flange * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, False)
-    z_bar_numerator = -dim_panel.t / 2 * A_skin * E_hom_avg_x(dim_panel.t, A_panel/0.9, False) + dim_stringer.DIM3 / 2 * A_stringer_flange * E_hom_avg_x(
+    z_bar_numerator = -dim_panel.t / 2 * A_skin * E_hom_avg_x(dim_panel.t, A_panel / 0.9,
+                                                              False) + dim_stringer.DIM3 / 2 * A_stringer_flange * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, False) + (
                               dim_stringer.DIM3 + (
-                                  dim_stringer.DIM2 - dim_stringer.DIM3) / 2) * A_stringer_web * E_hom_avg_x(
+                              dim_stringer.DIM2 - dim_stringer.DIM3) / 2) * A_stringer_web * E_hom_avg_x(
         dim_stringer.DIM3, A_stringer, True)
     z_bar = z_bar_numerator / z_bar_denom
     Az2_stringer_web = A_stringer_web * np.square(
@@ -392,12 +393,13 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
     r_gyr = np.sqrt(I / A_tot)
     sigma_crippling = sigma_crip(config, dim_stringer)
     lamda = dim_panel.a / r_gyr
-    E = calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringer, dim_panel,
+    E, E_flange, E_web, E_panel, EI = calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringer, dim_panel,
                I_stringer_flange - Az2_stringer_flange, I_stringer_web - Az2_stringer_web,
                I_panel - Az2_panel, Az2_stringer_web,
                Az2_stringer_flange, Az2_panel)
     lamda_crit = calc_lamda_crit(E, sigma_crippling)
     sigma_cr = calc_sigma_cr(lamda, lamda_crit, E, sigma_crippling)
+    parse_constants(E_flange, E_web, E_panel, EI, z_bar, r_gyr, lamda, lamda_crit)
     return sigma_cr, sigma_crippling, E
 
 
@@ -406,11 +408,11 @@ def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsSt
            I_panel, Az2_stringer_web, Az2_stringer_flange, Az2_panel):
     A_inv = np.linalg.inv(A_stringer)
     D_inv = np.linalg.inv(D_stringer)
-    E_x_b_flange = A_stringer[0, 0] / dim_stringers.DIM3  # 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
+    E_x_b_flange = 0.9 * A_stringer[0, 0] / dim_stringers.DIM3  # 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
     E_x_b_panel = A_panel[0, 0] / dim_panels.t  # 12 / (dim_panels.t ** 3) * A[0, 0]
-    E_x_b_web = 1 / (A_inv[0, 0] *
-                     dim_stringers.DIM3)  # 12 / (D_inv[0, 0] * (dim_stringers.DIM4 ** 3))
-    E_y_b_flange = D_stringer[0, 0] * 12 / (
+    E_x_b_web = 0.9 * 1 / (A_inv[0, 0] *
+                           dim_stringers.DIM3)  # 12 / (D_inv[0, 0] * (dim_stringers.DIM4 ** 3))
+    E_y_b_flange = 0.9 * D_stringer[0, 0] * 12 / (
             dim_stringers.DIM3 ** 3)  # 12 / (dim_stringers.DIM3 ** 3) * A_stringer[1, 1]
     E_y_b_panel = D_panel[0, 0] * 12 / (dim_panels.t ** 3)  # 12 / (dim_panels.t ** 3) * A_stringer[1, 1]
     E_y_b_web = E_x_b_web  # 12 / (D_inv[1, 1] * (dim_stringers.DIM4 ** 3))
@@ -419,11 +421,11 @@ def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsSt
     denominator = I_stringer_web + Az2_stringer_web + I_stringer_flange + Az2_stringer_flange + I_panel + Az2_panel
     numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
     E_y_b = numerator / denominator
-    return E_y_b
+    return E_y_b, E_x_b_flange, E_x_b_web, 12 / (dim_panels.t ** 3) * (D_panel[0, 0]), numerator
 
 
 def calc_lamda_crit(E, sigma_crip):
-    lamda_crit = np.sqrt((2 * np.pi ** 2 * E) / sigma_crip)
+    lamda_crit = np.pi * np.sqrt((2 * E) / sigma_crip)
     return lamda_crit
 
 
