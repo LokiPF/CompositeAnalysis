@@ -4,7 +4,8 @@ import numpy as np
 
 from configuration import MaterialProperties, DimensionsPly, Stringer, Panel, ReserveFactors, DimensionsPanel, \
     DimensionsStringer, LoadCase, Configuration
-from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix, parse_stringer_strength
+from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix, parse_stringer_strength, \
+    parse_constants
 from material_properties_handler import create_material_properties, create_dimensions_stringer, create_dimensions_panel, \
     create_configuration
 
@@ -387,11 +388,12 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
     r_gyr = np.sqrt(I / A_tot)
     sigma_crippling = sigma_crip(config, dim_stringer)
     lamda = dim_panel.a / r_gyr
-    E = calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringer, dim_panel,
-               I_stringer_flange - Az2_stringer_flange, I_stringer_web - Az2_stringer_web,
-               I_panel - Az2_panel, Az2_stringer_web,
-               Az2_stringer_flange, Az2_panel)
-    lamda_crit = calc_lamda_crit(E, sigma_crippling)
+    E, E_flange, E_web, E_panel, EI = calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringer, dim_panel,
+                                         I_stringer_flange - Az2_stringer_flange, I_stringer_web - Az2_stringer_web,
+                                         I_panel - Az2_panel, Az2_stringer_web,
+                                         Az2_stringer_flange, Az2_panel)
+    lamda_crit = calc_lamda_crit(EI*0.9 / I, sigma_crippling)
+    parse_constants(E_flange, E_web, E_panel, EI*0.9, z_bar, r_gyr, lamda, lamda_crit)
     sigma_cr = calc_sigma_cr(lamda, lamda_crit, E, sigma_crippling)
     return sigma_cr, sigma_crippling, E
 
@@ -399,22 +401,26 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
 def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsStringer, dim_panels: DimensionsPanel,
            I_stringer_flange, I_stringer_web,
            I_panel, Az2_stringer_web, Az2_stringer_flange, Az2_panel):
+    #A_stringer = np.divide(A_stringer, 0.9)
+    #D_panel = np.divide(D_stringer, 0.9)
     A_inv = np.linalg.inv(A_stringer)
     D_inv = np.linalg.inv(D_stringer)
-    E_x_b_flange = A_stringer[0, 0] / dim_stringers.DIM3  # 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
-    E_x_b_panel = A_panel[0, 0] / dim_panels.t  # 12 / (dim_panels.t ** 3) * A[0, 0]
+    D_panel = np.divide(D_panel, 0.9)
+    A = np.divide(A_panel, 0.9)
+    E_x_b_flange = 12 * D_stringer[0, 0] / dim_stringers.DIM3 ** 3  # 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
+    E_x_b_panel = 12 / (dim_panels.t ** 3) * (D_panel[0, 0]) # A_panel[0, 0] / dim_panels.t  # 12 / (dim_panels.t ** 3) * A[0, 0]
     E_x_b_web = 1 / (A_inv[0, 0] *
-                     dim_stringers.DIM3)  # 12 / (D_inv[0, 0] * (dim_stringers.DIM4 ** 3))
+                     dim_stringers.DIM4)  # 12 / (D_inv[0, 0] * (dim_stringers.DIM4 ** 3))
     E_y_b_flange = D_stringer[0, 0] * 12 / (
             dim_stringers.DIM3 ** 3)  # 12 / (dim_stringers.DIM3 ** 3) * A_stringer[1, 1]
-    E_y_b_panel = D_panel[0, 0] * 12 / (dim_panels.t ** 3)  # 12 / (dim_panels.t ** 3) * A_stringer[1, 1]
+    E_y_b_panel = (D_panel[0, 0]) * 12 / (dim_panels.t ** 3)  # 12 / (dim_panels.t ** 3) * A_stringer[1, 1]
     E_y_b_web = E_x_b_web  # 12 / (D_inv[1, 1] * (dim_stringers.DIM4 ** 3))
     # numerator = (I_stringer_web + Az2_stringer_web * E_x_b_web + E_y_b_flange * I_stringer_flange +
     #             Az2_stringer_flange * E_x_b_flange + E_y_b_panel * I_panel + Az2_panel * E_x_b_panel)
     denominator = I_stringer_web + Az2_stringer_web + I_stringer_flange + Az2_stringer_flange + I_panel + Az2_panel
-    numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
+    numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel  * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
     E_y_b = numerator / denominator
-    return E_y_b
+    return E_y_b, E_x_b_flange * 0.9, E_x_b_web * 0.9, 12 / (dim_panels.t ** 3) * (D_panel[0, 0]) * 0.9, numerator
 
 
 def calc_lamda_crit(E, sigma_crip):
