@@ -388,13 +388,14 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
     r_gyr = np.sqrt(I / A_tot)
     sigma_crippling = sigma_crip(config, dim_stringer)
     lamda = dim_panel.a / r_gyr
-    E, E_flange, E_web, E_panel, EI = calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringer, dim_panel,
+    E, E_flange, E_web, E_panel, EI, parse_E_hom = calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringer, dim_panel,
                I_stringer_flange - Az2_stringer_flange, I_stringer_web - Az2_stringer_web,
                I_panel - Az2_panel, Az2_stringer_web,
                Az2_stringer_flange, Az2_panel)
     lamda_crit = calc_lamda_crit(E, sigma_crippling)
+    print(sigma_crippling, E, lamda_crit)
     sigma_cr = calc_sigma_cr(lamda, lamda_crit, E, sigma_crippling)
-    parse_constants(E_flange, E_web, E_panel, EI, z_bar, r_gyr, lamda, lamda_crit)
+    parse_constants(parse_E_hom, E_web, E_panel, EI, z_bar, r_gyr, lamda, lamda_crit)
     return sigma_cr, sigma_crippling, E
 
 
@@ -418,7 +419,7 @@ def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsSt
     denominator = I_stringer_web + Az2_stringer_web + I_stringer_flange + Az2_stringer_flange + I_panel + Az2_panel
     numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel  * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
     E_y_b = numerator / denominator
-    return E_y_b, E_x_b_flange, E_x_b_web, 12 / (dim_panels.t ** 3) * (D_panel[0, 0]), numerator
+    return E_y_b, E_x_b_flange, E_x_b_web, 12 / (dim_panels.t ** 3) * (D_panel[0, 0]), numerator, 0.9 * 12 / (dim_stringers.DIM3 ** 3) * D_stringer[0, 0]
 
 
 def calc_lamda_crit(E, sigma_crip):

@@ -1,7 +1,6 @@
 import csv
 import os
 
-import numpy as np
 import openpyxl
 import pandas as pd
 
