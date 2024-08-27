@@ -7,7 +7,10 @@ from configuration import MaterialProperties, DimensionsPly, Stringer, Panel, Re
 from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix, parse_stringer_strength, \
     parse_constants
 from material_properties_handler import create_material_properties, create_dimensions_stringer, create_dimensions_panel, \
-    create_configuration
+    create_configuration, print_E
+
+E_x_flange = 0
+E_x_web = 0
 
 
 def calculate_Q_matrix(mat: MaterialProperties, nu21):
@@ -285,7 +288,7 @@ def biaxial_loading_stress(a, b, t, D, sigma_x, sigma_y):
 
 def stiffness_ratio(D):
     # Extract stiffness coefficients from the D matrix
-    D11, D12, D22, D66 = D[0, 0], D[0, 1], D[1, 1], D[1, 0]
+    D11, D12, D22, D66 = D[0, 0], D[0, 1], D[1, 1], D[2, 2]
 
     # Calculate delta
     delta = np.sqrt(D11 * D22) / (D12 + 2 * D66)
@@ -400,6 +403,8 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
 def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsStringer, dim_panels: DimensionsPanel,
            I_stringer_flange, I_stringer_web,
            I_panel, Az2_stringer_web, Az2_stringer_flange, Az2_panel):
+    global E_x_web
+    global E_x_flange
     #A_stringer = np.divide(A_stringer, 0.9)
     #D_panel = np.divide(D_stringer, 0.9)
     A_inv = np.linalg.inv(A_stringer)
@@ -417,6 +422,8 @@ def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsSt
     denominator = I_stringer_web + Az2_stringer_web + I_stringer_flange + Az2_stringer_flange + I_panel + Az2_panel
     numerator = E_y_b_flange * I_stringer_flange + E_x_b_flange * Az2_stringer_flange + E_y_b_panel  * I_panel + E_x_b_panel * Az2_panel + E_y_b_web * I_stringer_web + E_x_b_web * Az2_stringer_web
     E_y_b = numerator / denominator
+    E_x_web = E_x_b_web / 0.9
+    E_x_flange = E_x_b_flange / 0.9
     return E_y_b, E_x_b_flange, E_x_b_web, 12 / (dim_panels.t ** 3) * (D_panel[0, 0]), numerator, 0.9 * 12 / (dim_stringers.DIM3 ** 3) * D_stringer[0, 0]
 
 
@@ -495,11 +502,13 @@ if __name__ == '__main__':
     dimensions_stringer = create_dimensions_stringer()
     dimensions_pannel = create_dimensions_panel()
     dimensions_ply = DimensionsPly()
+    A, B, D = calc_ABD_matrix(material_properties, dimensions_ply, dimensions_stringer)
     configuration = create_configuration()
     task_c(material_properties, dimensions_ply, load_cases)
     task_d(load_cases, dimensions_stringer, dimensions_pannel, material_properties, dimensions_ply)
     task_e(configuration, load_cases, dimensions_stringer, dimensions_pannel, material_properties, dimensions_ply)
     write_excel_template(load_cases)
+    print_E(E_x_web, E_x_flange, dimensions_stringer)
     pass
 """# task_c  # TODO
     # task_d  # TODO

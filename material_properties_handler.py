@@ -1,13 +1,16 @@
+import numpy as np
+
 from configuration import MaterialProperties, DimensionsStringer, DimensionsPanel, Configuration
 
 
-def calc_homogenized_E_stringers(mat: MaterialProperties, dim: DimensionsStringer):
+def calc_homogenized_E_stringers(mat: MaterialProperties, dim: DimensionsStringer, A, t):
     """
     Function to get the homogenized E for the stringers
     :param mat:
     :param dim:
     :return: homogenized E
     """
+    return A[0,0] / t
     A1 = dim.DIM1 * dim.DIM3  # Area flange
     A2 = (dim.DIM2 - dim.DIM3) * dim.DIM4  # Area web
     return (mat.E1 * A1 + mat.E2 * A2) / (A1 + A2)
@@ -38,5 +41,7 @@ def create_dimensions_panel():
 def create_configuration():
     return Configuration()
 
-
-print(calc_homogenized_E_stringers(create_material_properties(), create_dimensions_stringer()))
+def print_E(E_x_flange, E_x_web, dim):
+    A1 = dim.DIM1 # * dim.DIM3  # Area flange
+    A2 = (dim.DIM2 - dim.DIM4) # * dim.DIM3  # Area web
+    print(f"E: {(A2 * E_x_flange + A1 * E_x_web) / (A1 + A2)}")
