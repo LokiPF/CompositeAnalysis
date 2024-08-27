@@ -394,7 +394,7 @@ def euler_johnson(config: Configuration, dim_panel: DimensionsPanel, dim_stringe
                I_panel - Az2_panel, Az2_stringer_web,
                Az2_stringer_flange, Az2_panel)
     lamda_crit = calc_lamda_crit(E, sigma_crippling)
-    print(sigma_crippling, E, lamda_crit)
+    # print(sigma_crippling, E, lamda_crit)
     sigma_cr = calc_sigma_cr(lamda, lamda_crit, E, sigma_crippling)
     parse_constants(parse_E_hom, E_web, E_panel, EI, z_bar, r_gyr, lamda, lamda_crit)
     return sigma_cr, sigma_crippling, E
