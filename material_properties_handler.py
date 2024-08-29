@@ -18,9 +18,9 @@ def calc_homogenized_E_stringers(mat: MaterialProperties, dim: DimensionsStringe
 
 def create_material_properties():
     material_properties = MaterialProperties()
-    material_properties.E1 = 130656.82
-    material_properties.E2 = 10050.52
-    material_properties.G12 = 5025.26
+    material_properties.E1 = 133382.5
+    material_properties.E2 = 10260.19
+    material_properties.G12 = 5130.1
     material_properties.nu12 = 0.33
     material_properties.R1t = 3050
     material_properties.R1c = 1500
@@ -41,7 +41,9 @@ def create_dimensions_panel():
 def create_configuration():
     return Configuration()
 
-def print_E(E_x_flange, E_x_web, dim):
-    A1 = dim.DIM1 # * dim.DIM3  # Area flange
-    A2 = (dim.DIM2 - dim.DIM4) # * dim.DIM3  # Area web
+def print_Engineering_Constants(E_x_flange, E_x_web, G_xy_flange, G_xy_web, dim):
+    A1 = dim.DIM1 # Area Web
+    A2 = (dim.DIM2 - dim.DIM4) # Area flange
     print(f"E: {(A2 * E_x_flange + A1 * E_x_web) / (A1 + A2)}")
+    print(f"G: {(A2 * G_xy_flange + A1 * G_xy_web) / (A1 + A2)}")
+

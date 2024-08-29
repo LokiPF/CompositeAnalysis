@@ -7,10 +7,12 @@ from configuration import MaterialProperties, DimensionsPly, Stringer, Panel, Re
 from excel_handler import read_excel_input, write_excel_template, parse_ADB_matrix, parse_stringer_strength, \
     parse_constants
 from material_properties_handler import create_material_properties, create_dimensions_stringer, create_dimensions_panel, \
-    create_configuration, print_E
+    create_configuration, print_Engineering_Constants
 
 E_x_flange = 0
 E_x_web = 0
+G_xy_flange = 0
+G_xy_web = 0
 
 
 def calculate_Q_matrix(mat: MaterialProperties, nu21):
@@ -405,10 +407,18 @@ def calc_E(A_panel, D_panel, A_stringer, D_stringer, dim_stringers: DimensionsSt
            I_panel, Az2_stringer_web, Az2_stringer_flange, Az2_panel):
     global E_x_web
     global E_x_flange
+    global G_xy_flange
+    global G_xy_web
     #A_stringer = np.divide(A_stringer, 0.9)
     #D_panel = np.divide(D_stringer, 0.9)
+
     A_inv = np.linalg.inv(A_stringer)
     D_inv = np.linalg.inv(D_stringer)
+
+    # Calculate G_xy_flange and G_xy_web
+    G_xy_flange = A_stringer[2, 2] / dim_stringers.DIM3
+    G_xy_web = 1 / (A_inv[2, 2] * dim_stringers.DIM3)
+
     E_x_b_flange = 0.9 * A_stringer[0, 0] / dim_stringers.DIM3  # 12 / (dim_stringers.DIM3 ** 3) * D[0, 0]
     E_x_b_panel = A_panel[0, 0] / dim_panels.t  # 12 / (dim_panels.t ** 3) * A[0, 0]
     E_x_b_web = 0.9 * 1 / (A_inv[0, 0] *
@@ -508,7 +518,7 @@ if __name__ == '__main__':
     task_d(load_cases, dimensions_stringer, dimensions_pannel, material_properties, dimensions_ply)
     task_e(configuration, load_cases, dimensions_stringer, dimensions_pannel, material_properties, dimensions_ply)
     write_excel_template(load_cases)
-    print_E(E_x_web, E_x_flange, dimensions_stringer)
+    print_Engineering_Constants(E_x_web, E_x_flange, G_xy_flange, G_xy_web, dimensions_stringer)
     pass
 """# task_c  # TODO
     # task_d  # TODO

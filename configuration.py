@@ -97,6 +97,7 @@ class LoadCase(Updatable):
 
 
 class IO(NamedTuple):
-    output_file: str = './input/ASE_Project2024_task2_1_Template_3771075.xlsx'
+    output_file: str = './input/ASE_Project2024_task2_1_Template_3775536.xlsx'
     sheet_name_output: str = 'ASE_Project2024_task2_1_Templat'
     delimiter: str = ''
+
