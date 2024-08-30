@@ -39,8 +39,8 @@ def calculate_Q_bar_matrix(Q, theta):
     Q11_bar = Q11 * cos4_theta + 2 * (Q12 + 2 * Q66) * sin2cos2_theta + Q22 * sin4_theta
     Q12_bar = (Q11 + Q22 - 4 * Q66) * sin2cos2_theta + Q12 * (sin4_theta + cos4_theta)
     Q22_bar = Q11 * sin4_theta + 2 * (Q12 + 2 * Q66) * sin2cos2_theta + Q22 * cos4_theta
-    Q16_bar = (Q11 - Q12 - 2 * Q66) * sin_theta * cos_theta ** 3 + (Q12 - Q22 + 2 * Q66) * sin_theta ** 3 * cos_theta
-    Q26_bar = (Q11 - Q12 - 2 * Q66) * cos_theta * sin_theta ** 3 + (Q12 - Q22 + 2 * Q66) * cos_theta ** 3 * sin_theta
+    Q16_bar = (Q11 - Q12 - 2 * Q66) * sin_theta * (cos_theta ** 3) + (Q12 - Q22 + 2 * Q66) * (sin_theta ** 3) * cos_theta
+    Q26_bar = (Q11 - Q12 - 2 * Q66) * cos_theta * (sin_theta ** 3) + (Q12 - Q22 + 2 * Q66) * (cos_theta ** 3) * sin_theta
     Q66_bar = (Q11 + Q22 - 2 * Q12 - 2 * Q66) * sin2cos2_theta + Q66 * (sin4_theta + cos4_theta)
 
     Q_bar = np.array([
