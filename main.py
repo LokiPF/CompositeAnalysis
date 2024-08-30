@@ -128,7 +128,7 @@ def puck_failure_criteria(sigma2, tau21, p, material_props):
 
     # Calculate sigma_2C and tau_21C
     sigma2C = -R_perp_A
-    tau21C = R_parallel * np.sqrt(1.0 + 2.0 * p * (R_perp_A / R_parallel))
+    tau21C = R_parallel * np.sqrt(1.0 + 2.0 * p)
 
     mode = ""
     if sigma2 >= 0:
@@ -137,7 +137,7 @@ def puck_failure_criteria(sigma2, tau21, p, material_props):
             (tau21 / R_parallel) ** 2 +
             (1 - p * R_perp / R_parallel) ** 2 * (sigma2 / R_perp) ** 2) + p * (sigma2 / R_parallel)
         mode = "A"
-    elif sigma2 < 0 and abs(tau21 / sigma2) >= abs(tau21C / R_perp_A):
+    elif abs(tau21 / sigma2) >= abs(tau21C) / R_perp_A:
         # Mode B
         f_E_IFF = (1.0 / R_parallel) * (
                 np.sqrt(tau21 ** 2 + (p * sigma2) ** 2) +
